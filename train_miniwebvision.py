@@ -12,7 +12,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
-import csv
 import torchnet
 acc_meter = torchnet.meter.ClassErrorMeter(topk=[1, 5], accuracy=True)
 
@@ -37,9 +36,9 @@ parser.add_argument('--alpha', type=float, default=0.9, help='The threshold for 
 parser.add_argument('--nc_set', type=str, default=None, help='The .txt file of all identified NC instances.')
 parser.add_argument('--no_vectors', type=int, default=20, help='The number of uniform-like vectors to identify NC instances.')
 parser.add_argument('--sigma', type=float, default=0.05, help='The standard deviation used to generate uniform-like vectors.')
-parser.add_argument('--omega_c', type=float, default=10.0, help='The weightage for clean instances.')
-parser.add_argument('--omega_nnc', type=float, default=32.0, help='The weightage for non-NC instances.')
-parser.add_argument('--omega_nc', type=float, default=4.0, help='The weightage for NC instances.')
+parser.add_argument('--omega_1', type=float, default=10.0, help='The weightage for clean instances.')
+parser.add_argument('--omega_2', type=float, default=32.0, help='The weightage for non-NC instances.')
+parser.add_argument('--omega_3', type=float, default=4.0, help='The weightage for NC instances.')
 parser.add_argument('--epochs', default=300, type =int)
 parser.add_argument('--lr', default=0.01, type=float)
 parser.add_argument('--momentum', default=0.9, type=float)
@@ -152,7 +151,7 @@ def identify_nc(args):
     nc_set = []
     for i in range(len(indices)):
         _, target = lines[i].split()
-        if indices[i] > 0.0 and target < args.num_classes:
+        if indices[i] > 0.0 and int(target) < args.num_classes:
             nc_set.append(lines[i])
     nc_set = set(nc_set)
     for l in nc_set:
@@ -207,10 +206,10 @@ def train(train_loader, model, optimizer, epoch, args, ratio):
             clean_idx = c_score >= args.clean_th
             c_size = sum(clean_idx)
             if c_size > 0:
-                loss_c = mixup_criterion(criterion, output[nnc_indices][clean_idx], target_hard_nnc_a[clean_idx], target_hard_nnc_b[clean_idx], lam_nnc)
-                l_c += loss_c.item()
+                loss_clean = mixup_criterion(criterion, output[nnc_indices][clean_idx], target_hard_nnc_a[clean_idx], target_hard_nnc_b[clean_idx], lam_nnc)
+                l_c += loss_clean.item()
             else:
-                loss_c = 0.0
+                loss_clean = 0.0
 
             s_idx = c_score < args.clean_th
             s_size = sum(s_idx)
@@ -221,12 +220,12 @@ def train(train_loader, model, optimizer, epoch, args, ratio):
                 pre_b = torch.mul(F.softmax(output[nnc_indices][s_idx], dim=1), target_soft_nnc_b[s_idx])
                 loss_b = -(1.0 - lam_nnc) *(torch.log(pre_b.sum(1))).sum(0)
 
-                loss_s = loss_a + loss_b
-                loss_s /= s_size
+                loss_nnc = loss_a + loss_b
+                loss_nnc /= s_size
 
-                l_s += loss_s.item()
+                l_s += loss_nnc.item()
             else:
-                loss_s = 0.0
+                loss_nnc = 0.0
 
 
         nc_indices = target_hard > (args.num_classes - 1)
@@ -237,7 +236,7 @@ def train(train_loader, model, optimizer, epoch, args, ratio):
         else:
             loss_nc = 0.0
 
-        loss = (args.omega_c*loss_c + args.omega_nnc*loss_s + args.omega_nc*loss_nc)/args.batch_size
+        loss = (args.omega_1*loss_clean + args.omega_2*loss_nnc + args.omega_3*loss_nc)/args.batch_size
 
         optimizer.zero_grad()
         loss.backward()
