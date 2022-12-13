@@ -5,8 +5,7 @@ from numpy import inf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models as models 
-import csv
+import torchvision.models as models
 import train_clothing1m_dataloader as dataloader
 from torch.autograd import Variable
 
@@ -29,9 +28,9 @@ parser.add_argument('--alpha', type=float, default=1.05, help='The threshold for
 parser.add_argument('--nc_set', type=str, default=None, help='The .txt file of all identified NC instances.')
 parser.add_argument('--no_vectors', type=int, default=20, help='The number of uniform-like vectors to identify NC instances.')
 parser.add_argument('--sigma', type=float, default=0.05, help='The standard deviation used to generate uniform-like vectors.')
-parser.add_argument('--omega_c', type=float, default=1.0, help='The weightage for clean instances.')
-parser.add_argument('--omega_nnc', type=float, default=32, help='The weightage for non-NC instances.')
-parser.add_argument('--omega_nc', type=float, default=1.0, help='The weightage for NC instances.')
+parser.add_argument('--omega_1', type=float, default=1.0, help='The weightage for clean instances.')
+parser.add_argument('--omega_2', type=float, default=32, help='The weightage for non-NC instances.')
+parser.add_argument('--omega_3', type=float, default=1.0, help='The weightage for NC instances.')
 parser.add_argument('--epochs', required=False, type=int, default=20)
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--momentum', type=float, default=0.9)
@@ -77,32 +76,31 @@ def prediction_vector(net, dataloader, name):
 
 
 
-def prediction_avg(args, dirs, name):
-    '''
-    dirs: a list of prediction softmax vectors for the complete noisy training set, eg: ['xxx.npy', 'yyy.npy', 'zzz.npy']
-    Average the list of predictions in dirs and save it as '{}/{}_soft_labels.npy'.format(log_dir,name)
-    '''
+def prediction_avg(args, name = 'avg_prediction'):
 
-    train_length = len(np.load(dirs[0]))
-    prediction = np.zeros((train_length, len(dirs), args.num_classes), dtype=np.float32)
-    for idx in range(len(dirs)):
-        results = np.load(dirs[idx])
+    train_length = len(np.load(args.idv_prediction_vectors[0]))
+    prediction = np.zeros((train_length, len(args.idv_prediction_vectors), args.num_classes), dtype=np.float32)
+    for idx in range(len(args.idv_prediction_vectors)):
+        results = np.load(args.idv_prediction_vectors[idx])
         prediction[:, idx] = results
     avg = prediction.mean(axis=1)
     np.save('{}/{}.npy'.format(log_dir, name), avg)
+
     return '{}/{}.npy'.format(log_dir, name)
 
 
 
 def identify_nc(args):
+
     # generate uniform-like vectors
     np.random.seed(args.seed)
-    uniform_vectors = np.random.normal(1.0 / args.num_classes, args.sigma, (args.no_vectors, args.num_classes))
+    uniform_vectors = np.random.normal(1.0 /float(args.num_classes), args.sigma, (args.no_vectors, args.num_classes))
     # row normalization
     uniform_vectors[uniform_vectors < 0] = 0.005
     uniform_vectors[uniform_vectors > 1.0] = 1.0
     row_sums = uniform_vectors.sum(axis=1)
     uniform_vectors /= row_sums[:, np.newaxis]
+
 
     # compute the first term in (alpha, beta)-generalized kl divergence
     first_term = args.alpha * (np.sum(uniform_vectors * np.log2(uniform_vectors), axis=1))
@@ -122,10 +120,14 @@ def identify_nc(args):
 
     judgement = first_term >= second_term
     indices = np.sum(judgement, axis=0)  # sum over the votes from all uniform-like vectors
+
+
     with open('%s/noisy_train_key_list.txt' % args.data_path, 'r') as f:
         lines = f.read().splitlines()
-    nc_set = [lines[i] for i in range(len(indices)) if
-              indices[i] > 0.0]  # as long as there is a vote from any uniform-like vectors, this instance is NC
+    assert len(lines) == len(temp)
+
+
+    nc_set = [lines[i] for i in range(len(indices)) if indices[i] > 0.0]  # as long as there is a vote from any uniform-like vectors, this instance is NC
     nc_set = set(nc_set)
     for l in nc_set:
         with open(log_dir + '/nc_set.txt', 'a') as the_file:
@@ -201,10 +203,10 @@ def train(optimizer, ratio):
             data_nnc, target_nnc, target_nnc_hard = data[nnc_indices], target[nnc_indices], target_hard[nnc_indices]
             data_nnc, target_nnc, target_nnc_hard = Variable(torch.FloatTensor(data_nnc).cuda()), Variable(torch.FloatTensor(target_nnc).cuda()), Variable(torch.from_numpy(target_nnc_hard).long().cuda())
 
-            #apply mixup
-            data_nnc, target_nnc_a, target_nnc_b, lam = mixup_data(data_nnc, target_nnc, args.mixup_alpha)
             #the normalized class ratio
             pre1 = ratio[torch.cuda.LongTensor(target_nnc_hard.data)]
+            #apply mixup
+            data_nnc, target_nnc_a, target_nnc_b, lam = mixup_data(data_nnc, target_nnc, args.mixup_alpha)
             #double-hot vector
             target_nnc_a += pre1
             target_nnc_b += pre1
@@ -239,14 +241,14 @@ def train(optimizer, ratio):
         data_c, target_c_a, target_c_b = map(Variable, (data_c, target_c_a, target_c_b))
 
         output_c = net(data_c)
-        loss_c = mixup_criterion(criterion, output_c, target_c_a, target_c_b, lam_c)
-        loss_c_ += loss_c.item()
+        loss_clean = mixup_criterion(criterion, output_c, target_c_a, target_c_b, lam_c)
+        loss_c_ += loss_clean.item()
 
 
 
         # backward
         optimizer.zero_grad()
-        loss = (args.omega_c*loss_c + args.omega_nnc*loss_nnc + args.omega_nc*loss_nc)/args.batch_size
+        loss = (args.omega_1*loss_clean + args.omega_2*loss_nnc + args.omega_3*loss_nc)/args.batch_size
         loss.backward()
         optimizer.step()
 
@@ -313,16 +315,8 @@ def main(args):
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
     train_bvacc = 0.0
 
-    #logging
-    with open(log_dir+'/'+'record.csv', 'a', newline='') as csvFile:
-        writer = csv.writer(csvFile)
-        writer.writerow(np.array(['epoch', 'train loss', 'val_loss', 'val_acc', 'test acc']))
-    csvFile.close()
-
     print('\nNow training\n')
 
-
-    #training with double-hot vector
     for epoch in range(args.epochs):
             
         train_loss = train(optimizer, ratio)
@@ -331,28 +325,18 @@ def main(args):
 
         if train_bvacc < val_acc:
             train_bvacc = val_acc
-            with open(log_dir+'/'+'record.csv', 'a', newline='') as csvFile:
-                writer = csv.writer(csvFile)
-                writer.writerow(np.array([epoch, train_loss, val_loss, val_acc, test_acc, 'best val acc']))
-            csvFile.close()
-            torch.save(net.state_dict(), log_dir + '/train_best.pth')
+            print('Epoch', epoch, 'best training val accuracy:', val_acc, 'test accuracy', test_acc)
+
             
         else:
-            with open(log_dir+'/'+'record.csv', 'a', newline='') as csvFile:
-                writer = csv.writer(csvFile) 
-                writer.writerow(np.array([epoch, train_loss, val_loss, val_acc, test_acc]))
-            csvFile.close()
+            print('Epoch', epoch, 'training val accuracy:', val_acc, 'test accuracy', test_acc)
+
         
         scheduler.step(val_loss)
      
 
 
     #finetuning
-    with open(log_dir+'/'+'record.csv', 'a', newline='') as csvFile:
-        writer = csv.writer(csvFile)
-        writer.writerow(np.array(['epoch', 'train loss', 'val_loss', 'val_acc','test acc']))
-    csvFile.close()
-  
     print('\nNow finetuning\n')
 
     net.load_state_dict(torch.load(log_dir + '/train_best.pth'))
@@ -367,16 +351,12 @@ def main(args):
 
         if finetune_bvacc < val_acc:
             finetune_bvacc = val_acc
-            with open(log_dir+'/'+'record.csv', 'a', newline='') as csvFile:
-                writer = csv.writer(csvFile)
-                writer.writerow(np.array([epoch, train_loss, val_loss, val_acc, test_acc, 'best val acc']))
-            csvFile.close()
             torch.save(net.state_dict(), log_dir + '/finetune_best.pth')
+            print('Epoch', epoch, 'best finetuning val accuracy:', val_acc, 'test accuracy', test_acc)
+
         else:
-            with open(log_dir+'/'+'record.csv', 'a', newline='') as csvFile:
-                writer = csv.writer(csvFile) 
-                writer.writerow(np.array([epoch, train_loss, val_loss, val_acc, test_acc]))
-            csvFile.close()
+            print('Epoch', epoch, 'finetuning val accuracy:', val_acc, 'test accuracy', test_acc)
+
     
 
 
@@ -409,7 +389,7 @@ if __name__ == "__main__":
                 args.idv_prediction_vectors.append(idv_prediction_vector)
                 count += 1
                  
-        args.avg_prediction_vector = prediction_avg(args, args.idv_prediction_vectors, name='avg_prediction')
+        args.avg_prediction_vector = prediction_avg(args)
         
     #identify NC instances
     if not args.nc_set:
