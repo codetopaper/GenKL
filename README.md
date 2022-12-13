@@ -1,5 +1,5 @@
-# Code and other materials
+# GenKL: An iterative framework for resolving label ambiguity and label non-conformity in web images via a new Generalized KL divergence
 
-Reproducibility: The code for datasets Clothing1M, Food101/Food101N, and mini WebVision 1.0 are available.
+The GenKL code for Clothing1M, Food101/Food101N, and mini WebVision 1.0 datasets are available here.
     
-Data: Please find the 200 NC instances identified in the Clothing1M dataset (https://github.com/Cysu/noisy_label) in NC_instances.txt.
+NC instance identification task: The 200 manually verified NC instances from the Clothing1M dataset can be found in NC_instances.txt.
