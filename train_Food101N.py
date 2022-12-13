@@ -354,7 +354,7 @@ def main(args):
     ratio = ratio.requires_grad_(False).cuda()
 
 
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_deccay, nesterov=True)
+    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay, nesterov=True)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0)
     train_bvacc = 0.0
 
