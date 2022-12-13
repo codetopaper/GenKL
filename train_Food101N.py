@@ -480,7 +480,7 @@ if __name__ == "__main__":
     print('len(test_data)',len(test_data))     
 
     #model initialization
-    net = build_model()
+    net = build_model(device)
 
     
     main(args)
