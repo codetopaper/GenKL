@@ -30,14 +30,14 @@ parser.add_argument('--alpha', type=float, default=1.1, help='The threshold for 
 parser.add_argument('--nc_set', type=str, default=None, help='The .txt file of all identified NC instances.')
 parser.add_argument('--no_vectors', type=int, default=20, help='The number of uniform-like vectors to identify NC instances.')
 parser.add_argument('--sigma', type=float, default=0.0, help='The standard deviation used to generate uniform-like vectors.')
-parser.add_argument('--omega_c', type=float, default=20.0, help='The weightage for the loss term of clean instances.')
-parser.add_argument('--omega_nnc', type=float, default=100.0, help='The weightage for the loss term of non-NC instances.')
-parser.add_argument('--omega_nc', type=float, default=1.0, help='The weightage for the loss term of NC instances.')
+parser.add_argument('--omega_1', type=float, default=20.0, help='The weightage for the loss term of clean instances.')
+parser.add_argument('--omega_2', type=float, default=100.0, help='The weightage for the loss term of non-NC instances.')
+parser.add_argument('--omega_3', type=float, default=1.0, help='The weightage for the loss term of NC instances.')
 parser.add_argument('--epochs', type=int, default=40)
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--momentum', type=float, default=0.9)
 parser.add_argument('--weight_decay', type=float, default=5e-3)
-parser.add_argument('--finetune_epochs', type=int, default=25)
+parser.add_argument('--finetune_epochs', type=int, default=40)
 parser.add_argument('--num_classes', type=int, default=101)
 parser.add_argument('--train_bvacc', type=float, default=0.0)
 
@@ -184,7 +184,7 @@ def train(optimizer, ratio):
     def ce(input, target):
         return torch.mean(-torch.sum(target * torch.log(input), 1))
 
-    loss_s_ = 0.0
+    loss_nnc_ = 0.0
     loss_c_ = 0.0
     loss_nc_ = 0.0
 
@@ -238,11 +238,11 @@ def train(optimizer, ratio):
                 pre_b = torch.mul(F.softmax(output_s, dim=1), target_s_b)
                 loss_b = -(1 - lam) * (torch.log(pre_b.sum(1))).sum(0)
 
-                loss_s = loss_a + loss_b
-                loss_s /= float(noisy_len)
-                loss_s_ += loss_s.item()
+                loss_nnc = loss_a + loss_b
+                loss_nnc /= float(noisy_len)
+                loss_nnc_ += loss_nnc.item()
             else:
-                loss_s = 0.0
+                loss_nnc = 0.0
 
             clean_indices = target_hard_both >= args.num_classes
             clean_len = np.sum(clean_indices)
@@ -255,18 +255,18 @@ def train(optimizer, ratio):
                 data_c, target_c_a, target_c_b = map(Variable, (data_c, target_c_a, target_c_b))
 
                 output_g = net(data_c)
-                loss_c = mixup_criterion(criterion, output_g, target_c_a, target_c_b, lam)
-                loss_c_ += loss_c.item()
+                loss_clean = mixup_criterion(criterion, output_g, target_c_a, target_c_b, lam)
+                loss_c_ += loss_clean.item()
             else:
-                loss_c = 0.0
+                loss_clean = 0.0
 
         # backward
         optimizer.zero_grad()
-        loss = (args.omega_c * loss_c + args.omega_nnc * loss_s + args.omega_nc * loss_nc) / args.batch_size
+        loss = (args.omega_1 * loss_clean + args.omega_2 * loss_nnc + args.omega_3 * loss_nc) / args.batch_size
         loss.backward()
         optimizer.step()
 
-    return loss_nc_ + loss_s_ + loss_c_
+    return loss_nc_ + loss_nnc_ + loss_c_
 
 
 def mixup_criterion(criterion, pred, y_a, y_b, lam):
