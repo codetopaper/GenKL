@@ -28,18 +28,26 @@ parser.add_argument('--alpha', type=float, default=1.05, help='The threshold for
 parser.add_argument('--nc_set', type=str, default=None, help='The .txt file of all identified NC instances.')
 parser.add_argument('--no_vectors', type=int, default=20, help='The number of uniform-like vectors to identify NC instances.')
 parser.add_argument('--sigma', type=float, default=0.05, help='The standard deviation used to generate uniform-like vectors.')
-parser.add_argument('--omega_1', type=float, default=1.0, help='The weightage for clean instances.')
-parser.add_argument('--omega_2', type=float, default=32, help='The weightage for non-NC instances.')
-parser.add_argument('--omega_3', type=float, default=1.0, help='The weightage for NC instances.')
+parser.add_argument('--omega_1', type=float, default=1.0, help='The weightage for the loss term of clean instances.')
+parser.add_argument('--omega_2', type=float, default=32, help='The weightage for the loss term of non-NC instances.')
+parser.add_argument('--omega_3', type=float, default=1.0, help='The weightage for the loss term of NC instances.')
 parser.add_argument('--epochs', required=False, type=int, default=20)
+parser.add_argument('--start_epoch', type=int, default=0)
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--momentum', type=float, default=0.9)
 parser.add_argument('--weight_decay', type=float, default=1e-3)
 parser.add_argument('--finetune_epochs', type=int, default=25)
 parser.add_argument('--num_classes', required=False, type=int, default=14)
+parser.add_argument('--resume', type=str, default=None, help='Path to load checkpoint to resume training.')
+parser.add_argument('--train_bvacc', type=float, default=0.0, help='The best validation accuracy.')
 
 args = parser.parse_args()
 print(args)
+
+
+
+def save_checkpoint(state, filename='checkpoint.pth.tar'):
+    torch.save(state, filename)
 
 
 
@@ -277,7 +285,7 @@ def test(net, dataloader):
 
 def finetune(optimizer):
 
-    loss_avg = 0.0
+    loss_ = 0.0
     criterion = nn.CrossEntropyLoss()
 
     net.train()
@@ -287,12 +295,13 @@ def finetune(optimizer):
         output = net(data)
         loss = criterion(output, target)
         loss /= float(len(data))
+        loss_ += loss.item()
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-    return loss.item()
+    return loss_
 
 
 
@@ -313,23 +322,39 @@ def main(args):
 
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay, nesterov=True)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
-    train_bvacc = 0.0
 
     print('\nNow training\n')
 
-    for epoch in range(args.epochs):
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            checkpoint = torch.load(args.resume)
+            args.start_epoch = checkpoint['epoch']
+            args.train_bvacc = checkpoint['train_bvacc']
+            net.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(args.resume, checkpoint['epoch']))
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
+    torch.backends.cudnn.benchmark = True
+
+
+    for epoch in range(args.start_epoch, args.epochs):
             
         train_loss = train(optimizer, ratio)
         val_acc, val_loss = test(net, val_loader)
         test_acc, _ = test(net, test_loader)
 
-        if train_bvacc < val_acc:
-            train_bvacc = val_acc
+        if args.train_bvacc < val_acc:
+            args.train_bvacc = val_acc
             print('Epoch', epoch, 'best training val accuracy:', val_acc, 'test accuracy', test_acc)
+            save_checkpoint({'epoch': epoch+1, 'state_dict': net.state_dict(), 'optimizer': optimizer.state_dict(), 'train_bvacc': args.train_bvacc}, filename='{}/train_best.pth.tar'.format(args.folder_log))
 
             
         else:
             print('Epoch', epoch, 'training val accuracy:', val_acc, 'test accuracy', test_acc)
+            save_checkpoint({'epoch': epoch+1, 'state_dict': net.state_dict(), 'optimizer': optimizer.state_dict(), 'train_bvacc': args.train_bvacc}, filename='{}/train.pth.tar'.format(args.folder_log))
 
         
         scheduler.step(val_loss)
@@ -339,18 +364,18 @@ def main(args):
     #finetuning
     print('\nNow finetuning\n')
 
-    net.load_state_dict(torch.load(log_dir + '/train_best.pth'))
+    checkpoint = torch.load(args.folder_log+'/train_best.pth.tar')
+    net.load_state_dict(checkpoint['state_dict'])
 
     optimizer = torch.optim.Adam(net.parameters(), lr=0.0000005, weight_decay=1e-3)
-    finetune_bvacc = 0.0
     for epoch in range(args.finetune_epochs):
             
         train_loss = finetune(optimizer)
         val_acc, val_loss = test(net, val_loader)
         test_acc, _ = test(net, test_loader)
 
-        if finetune_bvacc < val_acc:
-            finetune_bvacc = val_acc
+        if args.train_bvacc < val_acc:
+            args.train_bvacc = val_acc
             torch.save(net.state_dict(), log_dir + '/finetune_best.pth')
             print('Epoch', epoch, 'best finetuning val accuracy:', val_acc, 'test accuracy', test_acc)
 
@@ -370,7 +395,6 @@ if __name__ == "__main__":
     create_folder(log_dir)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    torch.backends.cudnn.benchmark = True
 
     #obtain the averaged prediction vectors, which would be used to compute NC instances and double-hot vectors later
     net = build_model(device)
