@@ -33,7 +33,7 @@ python train_Food101N.py --seed 0 --idv_weights food/idv_weights/1/ckpt_b_val.pt
 
 #### To run the code for mini WebVision 1.0, please run below command. Note that the "mini_WebVision_1.0/10ep/idv_weights/x/checkpoint_0009.pth.tar" and "mini_WebVision_1.0/avg_prediction_vectors/x/avg.npy" data used below is provided [here](https://drive.google.com/drive/folders/1dP4m61BTNWMN-9vVJIqWZvmsoTWD3Syd?usp=sharing). Similarly, more trials can be ran by using different combinations of "checkpoint_0009.pth.tar" and "avg.npy" files and random seeds. 
 ```
-python train_Food101N.py --seed 0 --weights mini_WebVision_1.0/10ep/idv_weights/0/checkpoint_0009.pth.tar --avg_prediction_vector mini_WebVision_1.0/avg_prediction_vectors/1/avg.npy
+python train_Food101N.py --index 0 --weights mini_WebVision_1.0/10ep/idv_weights/0/checkpoint_0009.pth.tar --avg_prediction_vector mini_WebVision_1.0/avg_prediction_vectors/1/avg.npy
 ```
 
 
