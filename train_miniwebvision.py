@@ -411,7 +411,12 @@ def main_worker(args):
         if os.path.isfile(args.weights):
             print("=> loading checkpoint '{}'".format(args.weights))
             checkpoint = torch.load(args.weights)
-            model.load_state_dict(checkpoint['state_dict'])
+
+            try: 
+                model.load_state_dict(checkpoint['state_dict'])
+            except:
+                model = torch.nn.DataParallel(model)
+                model.load_state_dict(checkpoint['state_dict'])
             print("=> loaded weights '{}' (epoch {})"
                   .format(args.weights, checkpoint['epoch']))
         else:
@@ -441,10 +446,7 @@ def main_worker(args):
     optimizer = torch.optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
     # optionally resume from a checkpoint
-    if os.path.isfile(args.finetune_resume):
-        #if to finetune, skip the training
-        args.start_epoch = args.epochs
-    elif args.resume:
+    if args.resume:
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
