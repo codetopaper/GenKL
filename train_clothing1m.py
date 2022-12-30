@@ -78,9 +78,9 @@ def prediction_vector(net, dataloader, name):
             pred = F.softmax(outputs, dim=1)
             probs.extend(list(pred.data.cpu().numpy()))
     probs = np.array(probs, dtype=np.float32)
-    np.save(log_dir + '/' + name + '.npy', probs)
+    np.save(args.folder_log + '/' + name + '.npy', probs)
 
-    return (log_dir + '/' + name + '.npy')
+    return (args.folder_log + '/' + name + '.npy')
 
 
 
@@ -92,9 +92,9 @@ def prediction_avg(args, name = 'avg_prediction'):
         results = np.load(args.idv_prediction_vectors[idx])
         prediction[:, idx] = results
     avg = prediction.mean(axis=1)
-    np.save('{}/{}.npy'.format(log_dir, name), avg)
+    np.save('{}/{}.npy'.format(args.folder_log, name), avg)
 
-    return '{}/{}.npy'.format(log_dir, name)
+    return '{}/{}.npy'.format(args.folder_log, name)
 
 
 
@@ -138,13 +138,13 @@ def identify_nc(args):
     nc_set = [lines[i] for i in range(len(indices)) if indices[i] > 0.0]  # as long as there is a vote from any uniform-like vectors, this instance is NC
     nc_set = set(nc_set)
     for l in nc_set:
-        with open(log_dir + '/nc_set.txt', 'a') as the_file:
+        with open(args.folder_log + '/nc_set.txt', 'a') as the_file:
             the_file.write(l.strip() + '\n')
     if len(nc_set) == 0:
-        with open(log_dir + '/nc_set.txt', 'a') as the_file:
+        with open(args.folder_log + '/nc_set.txt', 'a') as the_file:
             the_file.write('empty_set\n')
 
-    return log_dir + '/nc_set.txt'
+    return args.folder_log + '/nc_set.txt'
 
 
 
@@ -376,7 +376,7 @@ def main(args):
 
         if args.train_bvacc < val_acc:
             args.train_bvacc = val_acc
-            torch.save(net.state_dict(), log_dir + '/finetune_best.pth')
+            torch.save(net.state_dict(), args.folder_log + '/finetune_best.pth')
             print('Epoch', epoch, 'best finetuning val accuracy:', val_acc, 'test accuracy', test_acc)
 
         else:
@@ -391,8 +391,8 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
 
     #logging
-    log_dir = args.folder_log + '/' +str(args.seed)
-    create_folder(log_dir)
+    args.folder_log = args.folder_log + '/' +str(args.seed)
+    create_folder(args.folder_log)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
