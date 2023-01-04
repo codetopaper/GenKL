@@ -81,7 +81,16 @@ class clothing_dataset(Dataset):
                 if l in self.nc_imgs:
                     self.soft_labels[index] = uniform_vector
 
-                    
+        elif mode == 'train':
+            self.train_imgs = []
+            with open('%s/noisy_train_key_list.txt'%self.root,'r') as f:#
+            
+                lines = f.read().splitlines()
+                for l in lines:
+                    img_path = '%s/'%self.root+l[7:]
+                    self.train_imgs.append(img_path)                    
+
+
     def __getitem__(self, index):
         if self.mode == 'test':
             img_path = self.test_imgs[index]
@@ -121,6 +130,12 @@ class clothing_dataset(Dataset):
             
                 return img, tmp, target   
         
+        elif self.mode == 'train':
+            img_path = self.train_imgs[index]
+            target=self.train_labels[img_path]
+            image=Image.open(img_path).convert('RGB')
+            img = self.transform(image)
+            return img, target 
 
     def __len__(self):
         if self.mode == 'test':
@@ -130,6 +145,8 @@ class clothing_dataset(Dataset):
         elif self.mode == 'train_clean':
             return len(self.train_clean_imgs)
         elif self.mode == 'nc_training':
+            return len(self.train_imgs)
+        elif self.mode == 'train':
             return len(self.train_imgs)
 
         
