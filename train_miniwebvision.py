@@ -270,8 +270,9 @@ def identify_clean(net, dataloader, args):
     clean_set = []
     for i in range(len(clean_list)):
         _, target = lines[i].split()
-        if clean_list[i] > 0.0 and target < args.num_classes:
-            clean_set.append(clean_list[i])
+        if clean_list[i] > 0.0 and int(target) < args.num_classes:
+            #clean_set.append(clean_list[i])
+            clean_set.append(lines[i])
     clean_set = set(clean_set)
 
     for l in clean_set:
@@ -574,21 +575,3 @@ def main():
 if __name__ == '__main__':
 
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
