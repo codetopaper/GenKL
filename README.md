@@ -6,13 +6,14 @@
 
 In iteration 0, the NC instances are identified via the averaged softmax vectors from models trained on the clean 50k of clothing1m. To train one model on the clean 50k of clothing1m to produce each individual softmax vectors, run below code:
 ```
-python train_clothing1m.py --folder_log iter0 --seed 0 --idv_prediction_vector clothing1m/idv_prediction_vectors/1/noisy1m.npy clothing1m/idv_prediction_vectors/2/noisy1m.npy clothing1m/idv_prediction_vectors/4/noisy1m.npy clothing1m/idv_prediction_vectors/7/noisy1m.npy clothing1m/idv_prediction_vectors/9/noisy1m.npy
+python clothing1m_iter0_softmax_weights.py --seed 0 
 ```
 
 Trial 1
 ```
-python clothing1m_iter0_softmax_weights.py --seed 0 
+python train_clothing1m.py --folder_log iter0 --seed 0 --idv_prediction_vector clothing1m/idv_prediction_vectors/1/noisy1m.npy clothing1m/idv_prediction_vectors/2/noisy1m.npy clothing1m/idv_prediction_vectors/4/noisy1m.npy clothing1m/idv_prediction_vectors/7/noisy1m.npy clothing1m/idv_prediction_vectors/9/noisy1m.npy
 ```
+
 Trial 2
 ```
 python train_clothing1m.py --folder_log iter0 --seed 1 --idv_prediction_vector clothing1m/idv_prediction_vectors/19/noisy1m.npy clothing1m/idv_prediction_vectors/2/noisy1m.npy clothing1m/idv_prediction_vectors/4/noisy1m.npy clothing1m/idv_prediction_vectors/7/noisy1m.npy clothing1m/idv_prediction_vectors/9/noisy1m.npy
